@@ -1,0 +1,14 @@
+{
+  "name": "@chatflow/types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared wire-contract types (types only, no runtime values)",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "chatflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Embeddable website chat widget platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "postinstall": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "dev": "concurrently -k -n api,dashboard,widget -c blue,green,magenta \"npm run dev -w @chatflow/api\" \"npm run dev -w @chatflow/dashboard\" \"npm run dev -w @chatflow/widget\"",
+    "build": "npm run build -w @chatflow/types && npm run build -w @chatflow/api && npm run build -w @chatflow/dashboard && npm run build -w @chatflow/widget",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "db:seed": "npm run db:seed -w @chatflow/api",
+    "demo": "bash scripts/demo.sh",
+    "db:validate": "prisma validate --schema apps/api/prisma/schema.prisma",
+    "db:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema apps/api/prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema apps/api/prisma/schema.prisma",
+    "db:status": "prisma migrate status --schema apps/api/prisma/schema.prisma",
+    "db:studio": "prisma studio --schema apps/api/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.1",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3"
+  }
+}
