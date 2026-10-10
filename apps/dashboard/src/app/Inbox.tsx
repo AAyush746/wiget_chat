@@ -143,11 +143,14 @@ function InboxRow({
           </time>
         </div>
         <p className="mt-0.5 truncate text-sm text-slate-500">{previewOf(row.lastMessage)}</p>
-        <div className="mt-1.5">
+        <div className="mt-1.5 flex items-center gap-2">
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE[row.status]}`}
           >
             {row.status}
+          </span>
+          <span className="truncate text-[10px] text-slate-400">
+            {row.assignedAgent ? `→ ${row.assignedAgent.name ?? 'agent'}` : 'Unassigned'}
           </span>
         </div>
       </button>

@@ -7,11 +7,24 @@ import { MembershipsService } from './memberships.service';
 import { WebsiteAccessService } from './website-access.service';
 import { WebsitesController } from './websites.controller';
 import { WebsitesService } from './websites.service';
+import { FaqsController } from './faqs.controller';
+import { FaqsService } from './faqs.service';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [WebsitesController, MembershipsController, AccessibleWebsitesController],
-  providers: [WebsitesService, MembershipsService, WebsiteAccessService, WebsiteAccessGuard],
+  controllers: [
+    WebsitesController,
+    MembershipsController,
+    AccessibleWebsitesController,
+    FaqsController,
+  ],
+  providers: [
+    WebsitesService,
+    MembershipsService,
+    WebsiteAccessService,
+    WebsiteAccessGuard,
+    FaqsService,
+  ],
   exports: [WebsitesService, WebsiteAccessService],
 })
 export class WebsitesModule {}

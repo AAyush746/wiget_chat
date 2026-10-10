@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, closeConversation, listConversations, login, sendMessageRest } from './api';
+import {
+  ApiError,
+  assignConversation,
+  claimConversation,
+  closeConversation,
+  listAssignableAgents,
+  listAssignments,
+  listConversations,
+  login,
+  sendMessageRest,
+} from './api';
 import { tokenStorage } from './storage';
 
 const fetchMock = vi.hoisted(() => vi.fn());
@@ -109,5 +119,43 @@ describe('endpoints', () => {
       '/api/websites/w1/conversations/c1/close',
       expect.anything(),
     );
+  });
+
+  it('posts the claim action without a body payload', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+    await claimConversation('w1', 'c1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/websites/w1/conversations/c1/claim',
+      expect.objectContaining({ method: 'POST', body: '{}' }),
+    );
+  });
+
+  it('posts the assign action with the target userId', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+    await assignConversation('w1', 'c1', 'u9');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/websites/w1/conversations/c1/assign',
+      expect.objectContaining({ method: 'POST', body: '{"userId":"u9"}' }),
+    );
+  });
+
+  it('fetches the assignment history as a plain list', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, []));
+    const history = await listAssignments('w1', 'c1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/websites/w1/conversations/c1/assignments',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(history).toEqual([]);
+  });
+
+  it('fetches the assignable agents for a website', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [{ id: 'u9', name: 'Bryn' }]));
+    const agents = await listAssignableAgents('w1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/websites/w1/assignable',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(agents).toEqual([{ id: 'u9', name: 'Bryn' }]);
   });
 });

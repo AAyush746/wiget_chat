@@ -4,6 +4,7 @@ import {
   applyInboxClose,
   applyInboxMessage,
   httpFailure,
+  insertInboxConversation,
   mergeOlderPage,
   sendMessage,
   stateFromPage,
@@ -43,6 +44,7 @@ const staffRow = {
     email: 'aria@example.com',
     lastSeenAt: '2026-10-09T10:00:00.000Z',
   },
+  assignedAgent: null,
   lastMessage: null,
 };
 
@@ -96,6 +98,25 @@ describe('inbox row updates', () => {
     const rows = applyInboxClose([staffRow as never], 'conv-1', '2026-10-09T11:00:00.000Z');
     expect(rows[0]!.status).toBe('CLOSED');
     expect(rows[0]!.closedAt).toBe('2026-10-09T11:00:00.000Z');
+  });
+});
+
+describe('insertInboxConversation', () => {
+  const newer = {
+    ...staffRow,
+    id: 'conv-new',
+    createdAt: '2026-10-09T11:00:00.000Z',
+    updatedAt: '2026-10-09T11:00:00.000Z',
+  };
+
+  it('prepends the newest conversation, keeping createdAt-desc order', () => {
+    const rows = insertInboxConversation([staffRow as never], newer as never);
+    expect(rows.map((r) => r.id)).toEqual(['conv-new', 'conv-1']);
+  });
+
+  it('is a no-op for a conversation already in the list', () => {
+    const rows = insertInboxConversation([staffRow as never, newer as never], newer as never);
+    expect(rows).toHaveLength(2);
   });
 });
 

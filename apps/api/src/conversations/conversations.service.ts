@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConversationStatus, type Conversation, type Website } from '@prisma/client';
+import { ConversationStatus, type Conversation, type Visitor, type Website } from '@prisma/client';
 import type { AuthUser, Paginated, PublicConversation, StaffConversation } from '@chatflow/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -14,6 +14,7 @@ import {
   staffConversationInclude,
   toPublicConversation,
   toStaffConversation,
+  type StaffConversationRow,
 } from './conversation.mapper';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { ListConversationsQueryDto } from './dto/list-conversations-query.dto';
@@ -65,6 +66,8 @@ export class ConversationsService {
 
       return created;
     });
+
+    this.notifyCreated(conversation, visitor);
 
     return toPublicConversation(conversation);
   }
@@ -293,10 +296,30 @@ export class ConversationsService {
   // Published strictly after the close commits so sockets hear about a REST-
   // or WebSocket-initiated close through the same bus as message traffic.
   private notifyClosed(conversation: Conversation): void {
-    this.realtime.publishConversationClosed({
-      conversationId: conversation.id,
-      status: conversation.status,
-      closedAt: (conversation.closedAt ?? new Date()).toISOString(),
+    this.realtime.publishConversationClosed(
+      {
+        conversationId: conversation.id,
+        status: conversation.status,
+        closedAt: (conversation.closedAt ?? new Date()).toISOString(),
+      },
+      conversation.websiteId,
+    );
+  }
+
+  // Published strictly after the create commits: the "inbox" row is born the
+  // moment the visitor's POST returns. A staff row is assembled from the
+  // just-created conversation and the resolved visitor — a new thread has no
+  // messages and no assignee yet.
+  private notifyCreated(conversation: Conversation, visitor: Visitor): void {
+    const row: StaffConversationRow = {
+      ...conversation,
+      visitor,
+      assignedAgent: null,
+      messages: [],
+    };
+    this.realtime.publishConversationNew({
+      websiteId: conversation.websiteId,
+      conversation: toStaffConversation(row),
     });
   }
 }

@@ -20,6 +20,7 @@
     "test": "npm run test --workspaces --if-present",
     "db:seed": "npm run db:seed -w @chatflow/api",
     "demo": "bash scripts/demo.sh",
+    "demo:storefront": "npm run build -w @chatflow/widget && node scripts/copy-demo-widget.mjs && npm run dev -w @chatflow/demo-storefront",
     "db:validate": "prisma validate --schema apps/api/prisma/schema.prisma",
     "db:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema apps/api/prisma/schema.prisma",

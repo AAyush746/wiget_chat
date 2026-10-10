@@ -101,7 +101,8 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
           parsed = null;
         }
         const ok =
-          parsed !== null && (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+          parsed !== null &&
+          (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
           parsed.origin === origin;
         if (!ok) {
           errors.push(
@@ -110,6 +111,89 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
         }
       }
     }
+  }
+
+  // Optional: AI assistant provider and tuning (Phase 10). Defaults to the
+  // deterministic 'mock' provider so a misconfigured deployment can never
+  // spuriously call a paid API; opt in to 'openai' or 'groq' explicitly. When
+  // AI_PROVIDER is unset, a configured GROQ_API_KEY selects the free Groq
+  // backend automatically.
+  const aiProvider = config.AI_PROVIDER;
+  if (
+    aiProvider !== undefined &&
+    aiProvider !== 'mock' &&
+    aiProvider !== 'openai' &&
+    aiProvider !== 'groq'
+  ) {
+    errors.push('AI_PROVIDER must be "mock", "openai" or "groq" when provided');
+  }
+  const groqApiKey = config.GROQ_API_KEY;
+  if (aiProvider === 'groq' && (typeof groqApiKey !== 'string' || !groqApiKey.trim())) {
+    errors.push('GROQ_API_KEY is required when AI_PROVIDER=groq');
+  }
+  if (config.GROQ_MODEL !== undefined && typeof config.GROQ_MODEL !== 'string') {
+    errors.push('GROQ_MODEL must be a string when provided');
+  }
+  if (config.GROQ_BASE_URL !== undefined) {
+    if (
+      typeof config.GROQ_BASE_URL !== 'string' ||
+      !/^https?:\/\/\S+$/.test(config.GROQ_BASE_URL)
+    ) {
+      errors.push('GROQ_BASE_URL must be an http(s) URL when provided');
+    }
+  }
+  const aiMaxFaqContext = toInteger(config.AI_MAX_FAQ_CONTEXT ?? 50);
+  if (!Number.isInteger(aiMaxFaqContext) || aiMaxFaqContext < 1 || aiMaxFaqContext > 500) {
+    errors.push('AI_MAX_FAQ_CONTEXT must be an integer between 1 and 500');
+  }
+  if (aiProvider === 'openai') {
+    const apiKey = config.OPENAI_API_KEY;
+    if (typeof apiKey !== 'string' || !apiKey.trim()) {
+      errors.push('OPENAI_API_KEY is required when AI_PROVIDER=openai');
+    }
+    if (config.OPENAI_MODEL !== undefined && typeof config.OPENAI_MODEL !== 'string') {
+      errors.push('OPENAI_MODEL must be a string when provided');
+    }
+    const baseUrl = config.OPENAI_BASE_URL;
+    if (baseUrl !== undefined) {
+      if (typeof baseUrl !== 'string' || !/^https?:\/\/\S+$/.test(baseUrl)) {
+        errors.push('OPENAI_BASE_URL must be an http(s) URL when provided');
+      }
+    }
+  }
+
+  const aiIntervalMs = toInteger(config.AI_WORKER_INTERVAL_MS ?? 1500);
+  if (!Number.isInteger(aiIntervalMs) || aiIntervalMs < 100 || aiIntervalMs > 600_000) {
+    errors.push(`AI_WORKER_INTERVAL_MS must be an integer between 100 and 600000`);
+  }
+
+  const aiJobMaxAttempts = toInteger(config.AI_JOB_MAX_ATTEMPTS ?? 3);
+  if (!Number.isInteger(aiJobMaxAttempts) || aiJobMaxAttempts < 1 || aiJobMaxAttempts > 10) {
+    errors.push(`AI_JOB_MAX_ATTEMPTS must be an integer between 1 and 10`);
+  }
+
+  const aiMaxReplyLength = toInteger(config.AI_MAX_REPLY_LENGTH ?? 2000);
+  if (!Number.isInteger(aiMaxReplyLength) || aiMaxReplyLength < 1 || aiMaxReplyLength > 4000) {
+    errors.push(`AI_MAX_REPLY_LENGTH must be an integer between 1 and 4000`);
+  }
+
+  const aiDailyWebsiteLimit = toInteger(config.AI_DAILY_WEBSITE_LIMIT ?? 500);
+  if (!Number.isInteger(aiDailyWebsiteLimit) || aiDailyWebsiteLimit < 1) {
+    errors.push(`AI_DAILY_WEBSITE_LIMIT must be a positive integer`);
+  }
+
+  const aiLeaseMs = toInteger(config.AI_JOB_LEASE_MS ?? 120_000);
+  if (!Number.isInteger(aiLeaseMs) || aiLeaseMs < 1000) {
+    errors.push(`AI_JOB_LEASE_MS must be an integer of at least 1000`);
+  }
+
+  const aiRequestTimeoutMs = toInteger(config.AI_REQUEST_TIMEOUT_MS ?? 20_000);
+  if (
+    !Number.isInteger(aiRequestTimeoutMs) ||
+    aiRequestTimeoutMs < 1000 ||
+    aiRequestTimeoutMs > 120_000
+  ) {
+    errors.push(`AI_REQUEST_TIMEOUT_MS must be an integer between 1000 and 120000`);
   }
 
   // Optional: only used by the admin bootstrap seed.
@@ -140,6 +224,13 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     BCRYPT_ROUNDS: bcryptRounds,
     LOGIN_MAX_ATTEMPTS: loginMaxAttempts,
     LOGIN_LOCK_SECONDS: loginLockSeconds,
+    AI_WORKER_INTERVAL_MS: aiIntervalMs,
+    AI_JOB_MAX_ATTEMPTS: aiJobMaxAttempts,
+    AI_MAX_REPLY_LENGTH: aiMaxReplyLength,
+    AI_MAX_FAQ_CONTEXT: aiMaxFaqContext,
+    AI_DAILY_WEBSITE_LIMIT: aiDailyWebsiteLimit,
+    AI_JOB_LEASE_MS: aiLeaseMs,
+    AI_REQUEST_TIMEOUT_MS: aiRequestTimeoutMs,
   };
 }
 

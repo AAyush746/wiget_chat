@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ChatMessage,
   ConversationStatus,
@@ -7,7 +7,16 @@ import type {
   PublicWebsite,
   StaffConversation,
 } from '@chatflow/types';
-import { closeConversation, getConversation, listMessages, sendMessageRest } from '../lib/api';
+import {
+  ApiError,
+  assignConversation,
+  claimConversation,
+  closeConversation,
+  getConversation,
+  listAssignableAgents,
+  listMessages,
+  sendMessageRest,
+} from '../lib/api';
 import { formatTimestamp, visitorLabel } from '../lib/format';
 import {
   HISTORY_LIMIT,
@@ -211,21 +220,36 @@ function ConversationHeader({
                 {visitorLabel(conversation.visitor)}
               </h2>
               <StatusBadge status={conversation.status} closedAt={conversation.closedAt} />
+              <HandlingBadge
+                handling={conversation.handling}
+                handoffReason={conversation.handoffReason}
+              />
             </div>
             {conversation.visitor.email && (
               <p className="mt-0.5 truncate pl-6 text-xs text-slate-400">
                 {conversation.visitor.email}
               </p>
             )}
+            <p className="mt-0.5 truncate pl-6 text-xs text-slate-400">
+              <span>
+                {conversation.assignedAgent
+                  ? `Assigned to ${conversation.assignedAgent.name ?? '…'}`
+                  : 'Unassigned'}
+              </span>{' '}
+              · Handoff: {conversation.handoffReason ?? '—'}
+            </p>
           </div>
-          <button
-            type="button"
-            disabled={conversation.status === 'CLOSED' || closing || !website.isActive}
-            onClick={closeConversation}
-            className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {closing ? 'Closing…' : conversation.status === 'CLOSED' ? 'Closed' : 'Close'}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <AssignmentControls website={website} conversation={conversation} />
+            <button
+              type="button"
+              disabled={conversation.status === 'CLOSED' || closing || !website.isActive}
+              onClick={closeConversation}
+              className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {closing ? 'Closing…' : conversation.status === 'CLOSED' ? 'Closed' : 'Close'}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -263,6 +287,101 @@ function StatusBadge({
       {label}
     </span>
   );
+}
+
+// ------------------------------------------------------------- assignments
+
+function AssignmentControls({
+  website,
+  conversation,
+}: {
+  website: PublicWebsite;
+  conversation: StaffConversation;
+}) {
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const assignablesQuery = useQuery({
+    queryKey: ['assignable', website.id],
+    queryFn: () => listAssignableAgents(website.id),
+    staleTime: 30_000,
+    enabled: conversation.status !== 'CLOSED' && website.isActive,
+  });
+
+  const claim = useMutation({
+    mutationFn: () => claimConversation(website.id, conversation.id),
+    onSuccess: (updated) => {
+      setActionError(null);
+      applyAssignment(updated);
+    },
+    onError: (error) => setActionError(assignmentErrorMessage(error)),
+  });
+
+  const assign = useMutation({
+    mutationFn: (userId: string) => assignConversation(website.id, conversation.id, userId),
+    onSuccess: (updated) => {
+      setActionError(null);
+      applyAssignment(updated);
+    },
+    onError: (error) => setActionError(assignmentErrorMessage(error)),
+  });
+
+  const applyAssignment = (updated: StaffConversation) => {
+    queryClient.setQueryData<StaffConversation>(
+      ['conversation', website.id, conversation.id],
+      updated,
+    );
+    queryClient.invalidateQueries({ queryKey: ['conversations', website.id] });
+  };
+
+  const readOnly = conversation.status === 'CLOSED' || !website.isActive;
+  const busy = claim.isPending || assign.isPending;
+
+  return (
+    <div className="flex items-center gap-2">
+      {!conversation.assignedAgent && (
+        <button
+          type="button"
+          disabled={readOnly || busy}
+          onClick={() => claim.mutate()}
+          className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {claim.isPending ? 'Claiming…' : 'Claim'}
+        </button>
+      )}
+      <select
+        aria-label="Assign to agent"
+        value=""
+        disabled={readOnly || busy}
+        onChange={(event) => {
+          const userId = event.target.value;
+          if (userId) {
+            assign.mutate(userId);
+          }
+        }}
+        className="max-w-40 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <option value="">{conversation.assignedAgent ? 'Reassign…' : 'Assign…'}</option>
+        {(assignablesQuery.data ?? []).map((agent) => (
+          <option key={agent.id} value={agent.id}>
+            {agent.name ?? agent.email}
+          </option>
+        ))}
+      </select>
+      {actionError && (
+        <span role="alert" className="text-xs font-medium text-rose-600">
+          {actionError}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function assignmentErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  return 'Could not update the assignment.';
 }
 
 // ---------------------------------------------------------------- messages
@@ -550,5 +669,28 @@ function Placeholder({ text }: { text: string }) {
     <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-400">
       {text}
     </div>
+  );
+}
+
+function HandlingBadge({
+  handling,
+  handoffReason,
+}: {
+  handling: 'AI' | 'HANDOFF_PENDING' | 'HUMAN';
+  handoffReason: string | null;
+}) {
+  const styles: Record<string, string> = {
+    AI: 'bg-blue-50 text-blue-700',
+    HANDOFF_PENDING: 'bg-amber-50 text-amber-700',
+    HUMAN: 'bg-emerald-50 text-emerald-700',
+  };
+  const label =
+    handling === 'HANDOFF_PENDING' && handoffReason ? `Handoff: ${handoffReason}` : handling;
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${styles[handling]}`}
+    >
+      {label}
+    </span>
   );
 }

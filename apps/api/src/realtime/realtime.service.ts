@@ -1,20 +1,44 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
-import type { ConversationClosedEvent, MessageNewEvent, PublicConversation } from '@chatflow/types';
+import type {
+  ConversationAssignedEvent,
+  ConversationClosedEvent,
+  ConversationNewEvent,
+  MessageNewEvent,
+  PublicConversation,
+} from '@chatflow/types';
 
 /**
  * One committed change that connected clients should hear about. The
- * envelope carries the room target so the transport never has to dig it out
- * of the payload.
+ * envelope carries the room target (conversation + owning website) so the
+ * transport never has to dig it out of the payload.
  */
 export type RealtimeNotification =
-  | { event: 'message:new'; conversationId: string; payload: MessageNewEvent }
+  | {
+      event: 'message:new';
+      conversationId: string;
+      websiteId: string;
+      payload: MessageNewEvent;
+    }
   | {
       event: 'conversation:updated';
       conversationId: string;
+      websiteId: string;
       payload: { conversation: PublicConversation };
     }
-  | { event: 'conversation:closed'; conversationId: string; payload: ConversationClosedEvent };
+  | {
+      event: 'conversation:closed';
+      conversationId: string;
+      websiteId: string;
+      payload: ConversationClosedEvent;
+    }
+  | {
+      event: 'conversation:assigned';
+      conversationId: string;
+      websiteId: string;
+      payload: ConversationAssignedEvent;
+    }
+  | { event: 'conversation:new'; websiteId: string; payload: ConversationNewEvent };
 
 /**
  * In-process bridge between application services and the Socket.IO gateway.
@@ -33,26 +57,42 @@ export type RealtimeNotification =
 export class RealtimeService {
   private readonly bus = new EventEmitter();
 
-  publishMessageNew(message: MessageNewEvent): void {
+  publishMessageNew(message: MessageNewEvent, websiteId: string): void {
     this.notify({
       event: 'message:new',
       conversationId: message.conversationId,
+      websiteId,
       payload: message,
     });
   }
 
-  publishConversationUpdated(conversation: PublicConversation): void {
+  publishConversationNew(payload: ConversationNewEvent): void {
+    this.notify({ event: 'conversation:new', websiteId: payload.websiteId, payload });
+  }
+
+  publishConversationUpdated(conversation: PublicConversation, websiteId: string): void {
     this.notify({
       event: 'conversation:updated',
       conversationId: conversation.id,
+      websiteId,
       payload: { conversation },
     });
   }
 
-  publishConversationClosed(payload: ConversationClosedEvent): void {
+  publishConversationClosed(payload: ConversationClosedEvent, websiteId: string): void {
     this.notify({
       event: 'conversation:closed',
       conversationId: payload.conversationId,
+      websiteId,
+      payload,
+    });
+  }
+
+  publishConversationAssigned(payload: ConversationAssignedEvent, websiteId: string): void {
+    this.notify({
+      event: 'conversation:assigned',
+      conversationId: payload.conversationId,
+      websiteId,
       payload,
     });
   }

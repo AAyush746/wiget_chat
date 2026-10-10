@@ -10,6 +10,8 @@ export function toPublicWebsite(website: Website): PublicWebsite {
     domain: website.domain,
     publicKey: website.publicKey,
     isActive: website.isActive,
+    aiEnabled: website.aiEnabled,
+    aiFallbackMessage: website.aiFallbackMessage,
     createdAt: website.createdAt.toISOString(),
     updatedAt: website.updatedAt.toISOString(),
   };

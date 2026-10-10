@@ -221,6 +221,24 @@ export function applyInboxClose(
   );
 }
 
+/**
+ * Insert a freshly-created conversation into an inbox page. New threads are
+ * always the newest row (createdAt desc, the REST ordering), but the list is
+ * re-sorted defensively so a duplicate `conversation:new` event can never
+ * double-insert or corrupt the order.
+ */
+export function insertInboxConversation(
+  rows: StaffConversation[],
+  conversation: StaffConversation,
+): StaffConversation[] {
+  if (rows.some((row) => row.id === conversation.id)) {
+    return rows;
+  }
+  return [...rows, conversation].sort(
+    (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+  );
+}
+
 /** Bound the composer text to the backend's enforced maximum. */
 export const MAX_MESSAGE_LENGTH = 4000;
 export const HISTORY_LIMIT = MESSAGE_LIMIT;

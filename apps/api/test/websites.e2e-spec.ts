@@ -508,4 +508,79 @@ describe('Phase 4a: websites, membership & tenant authorization (e2e)', () => {
       expect(unknown.status).toBe(404);
     });
   });
+
+  describe('AI agent (Connect Agent)', () => {
+    const auth = () => ({ Authorization: `Bearer ${adminToken}` });
+
+    it('reports the connection state and provider without leaking secrets', async () => {
+      const res = await request(server()).get(`/api/websites/${siteA.id}/ai`).set(auth());
+
+      expect(res.status).toBe(200);
+      expect(res.body.aiEnabled).toBe(false);
+      expect(['mock', 'groq', 'openai']).toContain(res.body.provider);
+      expect(typeof res.body.model).toBe('string');
+      expect(typeof res.body.ready).toBe('boolean');
+      expect(res.text).not.toMatch(/api[_-]?key/i);
+    });
+
+    it('connects the agent and seeds a default escalation reply', async () => {
+      const res = await request(server())
+        .patch(`/api/websites/${siteA.id}/ai`)
+        .set(auth())
+        .send({ aiEnabled: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.aiEnabled).toBe(true);
+      expect(res.body.aiFallbackMessage).toBeTruthy();
+
+      const status = await request(server()).get(`/api/websites/${siteA.id}/ai`).set(auth());
+      expect(status.body.aiEnabled).toBe(true);
+      expect(status.body.aiFallbackMessage).toBe(res.body.aiFallbackMessage);
+    });
+
+    it('sets a custom escalation reply (trimmed) and disconnects', async () => {
+      const custom = await request(server())
+        .patch(`/api/websites/${siteA.id}/ai`)
+        .set(auth())
+        .send({ aiFallbackMessage: '  We will reply by email.  ' });
+      expect(custom.status).toBe(200);
+      expect(custom.body.aiFallbackMessage).toBe('We will reply by email.');
+
+      const off = await request(server())
+        .patch(`/api/websites/${siteA.id}/ai`)
+        .set(auth())
+        .send({ aiEnabled: false });
+      expect(off.status).toBe(200);
+      expect(off.body.aiEnabled).toBe(false);
+    });
+
+    it('rejects AGENT on the agent endpoints (403)', async () => {
+      const read = await request(server())
+        .get(`/api/websites/${siteA.id}/ai`)
+        .set('Authorization', `Bearer ${agentToken}`);
+      expect(read.status).toBe(403);
+
+      const write = await request(server())
+        .patch(`/api/websites/${siteA.id}/ai`)
+        .set('Authorization', `Bearer ${agentToken}`)
+        .send({ aiEnabled: true });
+      expect(write.status).toBe(403);
+    });
+
+    it('validates input (400) and unknown website (404)', async () => {
+      const empty = await request(server())
+        .patch(`/api/websites/${siteA.id}/ai`)
+        .set(auth())
+        .send({});
+      expect(empty.status).toBe(400);
+
+      const unknown = await request(server())
+        .get('/api/websites/00000000-0000-4000-8000-000000000000/ai')
+        .set(auth());
+      expect(unknown.status).toBe(404);
+
+      const badId = await request(server()).get('/api/websites/not-a-uuid/ai').set(auth());
+      expect(badId.status).toBe(400);
+    });
+  });
 });

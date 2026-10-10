@@ -9,8 +9,10 @@ import type {
 } from '@chatflow/types';
 import type {
   MessageNewEvent,
+  ConversationNewEvent,
   ConversationUpdatedEvent,
   ConversationClosedEvent,
+  ConversationAssignedEvent,
 } from '@chatflow/types';
 
 export type SocketStatus = 'disconnected' | 'connecting' | 'connected';
@@ -24,9 +26,11 @@ export type SocketStatus = 'disconnected' | 'connecting' | 'connected';
 export type ChatSocketEvent =
   | { type: 'status'; status: SocketStatus }
   | { type: 'reconnected' }
+  | { type: 'conversation:new'; payload: ConversationNewEvent }
   | { type: 'message:new'; payload: MessageNewEvent }
   | { type: 'conversation:updated'; payload: ConversationUpdatedEvent }
   | { type: 'conversation:closed'; payload: ConversationClosedEvent }
+  | { type: 'conversation:assigned'; payload: ConversationAssignedEvent }
   | { type: 'error'; payload: { code: string; message: string } };
 
 type Listener = (event: ChatSocketEvent) => void;
@@ -94,12 +98,16 @@ export class ChatSocket {
     });
     socket.on('disconnect', () => this.setStatus('disconnected'));
     socket.on('connect_error', () => this.setStatus('disconnected'));
+    socket.on('conversation:new', (payload) => this.emit({ type: 'conversation:new', payload }));
     socket.on('message:new', (payload) => this.emit({ type: 'message:new', payload }));
     socket.on('conversation:updated', (payload) =>
       this.emit({ type: 'conversation:updated', payload }),
     );
     socket.on('conversation:closed', (payload) =>
       this.emit({ type: 'conversation:closed', payload }),
+    );
+    socket.on('conversation:assigned', (payload) =>
+      this.emit({ type: 'conversation:assigned', payload }),
     );
     socket.on('error', ({ error }) => this.emit({ type: 'error', payload: error }));
   }

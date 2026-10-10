@@ -1,4 +1,5 @@
 import type { Message, User, Visitor } from '@prisma/client';
+import { MessageSender } from '@prisma/client';
 import type { ChatMessage } from '@chatflow/types';
 
 /** Message row plus the sender display names (never e-mails). */
@@ -23,9 +24,15 @@ export function toChatMessage(message: MessageWithSenders): ChatMessage {
     id: message.id,
     conversationId: message.conversationId,
     senderType: message.senderType,
-    senderName: message.visitor?.name ?? message.user?.name ?? null,
+    senderName:
+      message.senderType === MessageSender.AI
+        ? AI_SENDER_NAME
+        : (message.visitor?.name ?? message.user?.name ?? null),
     content: message.content,
     clientMessageId: message.clientMessageId,
     createdAt: message.createdAt.toISOString(),
   };
 }
+
+/** Display name attributed to automatic AI replies (never a human agent). */
+export const AI_SENDER_NAME = 'ChatFlow AI';

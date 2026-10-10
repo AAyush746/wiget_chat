@@ -158,15 +158,30 @@ describe('ChatSocket', () => {
     const kinds: string[] = [];
     chat.subscribe((event) => kinds.push(event.type));
 
+    fake.serverEmit('conversation:new', {
+      websiteId: 'w1',
+      conversation: { id: 'c-new' },
+    });
     fake.serverEmit('message:new', { conversationId: 'c1', message: serverMessage().message });
     fake.serverEmit('conversation:closed', {
       conversationId: 'c1',
       status: 'CLOSED',
       closedAt: '2026-10-09T10:00:00.000Z',
     });
+    fake.serverEmit('conversation:assigned', {
+      conversationId: 'c1',
+      assignedAgent: { id: 'u9', name: 'Bryn' },
+      assignedAt: '2026-10-09T10:05:00.000Z',
+    });
     fake.serverEmit('error', { error: { code: 'RATE_LIMITED', message: 'slow down' } });
 
-    expect(kinds).toEqual(['message:new', 'conversation:closed', 'error']);
+    expect(kinds).toEqual([
+      'conversation:new',
+      'message:new',
+      'conversation:closed',
+      'conversation:assigned',
+      'error',
+    ]);
   });
 
   it('disconnect tears the transport down and a new connect opens a fresh one', () => {

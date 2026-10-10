@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Northward Supplies — Example storefront</title>
+    <meta
+      name="description"
+      content="A sample e-commerce storefront that embeds the ChatFlow customer widget."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      // Demo configuration. Vite replaces %VITE_DEMO_WEBSITE_KEY% / %VITE_API_URL%
+      // from the repo-root .env files (see apps/demo/.env.example). When a
+      // variable is unset, Vite leaves its token literal in the HTML — so those
+      // literals are the "not configured" detection below.
+      //
+      // NOTE: the sentinels are written as string concatenation ("...' + '%')
+      // so Vite does NOT substitute inside them; a plain %VITE_...% token used
+      // as a sentinel would be replaced too, breaking the comparison (this
+      // exact bug hid the chat bubble on this page).
+      var KEY_UNSET = '%VITE_DEMO_WEBSITE_KEY' + '%';
+      var API_UNSET = '%VITE_API_URL' + '%';
+
+      var websiteKey = '%VITE_DEMO_WEBSITE_KEY%';
+      var apiUrl = '%VITE_API_URL%';
+      if (apiUrl === API_UNSET) {
+        apiUrl = 'http://localhost:4000';
+      }
+
+      window.ChatFlowDemo = { websiteKey: websiteKey, apiUrl: apiUrl };
+
+      if (websiteKey !== KEY_UNSET && websiteKey.length >= 16) {
+        window.ChatFlowConfig = {
+          publicKey: websiteKey,
+          apiUrl: apiUrl,
+        };
+      }
+    </script>
+    <script src="/widget.js" defer></script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

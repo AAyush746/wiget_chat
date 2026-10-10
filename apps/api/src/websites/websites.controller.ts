@@ -10,11 +10,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import type { Paginated, PublicWebsite } from '@chatflow/types';
+import type { AiAgentStatus, Paginated, PublicWebsite } from '@chatflow/types';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateWebsiteDto } from './dto/create-website.dto';
 import { ListWebsitesQueryDto } from './dto/list-websites-query.dto';
 import { UpdateWebsiteDto } from './dto/update-website.dto';
+import { UpdateWebsiteAiDto } from './dto/update-website-ai.dto';
 import { WebsiteIdParamDto } from './dto/website-id-param.dto';
 import { WebsitesService } from './websites.service';
 
@@ -56,5 +57,18 @@ export class WebsitesController {
   @Patch(':id/reactivate')
   reactivate(@Param() params: WebsiteIdParamDto): Promise<PublicWebsite> {
     return this.websites.setActive(params.id, true);
+  }
+
+  @Patch(':id/ai')
+  updateAi(
+    @Param() params: WebsiteIdParamDto,
+    @Body() dto: UpdateWebsiteAiDto,
+  ): Promise<PublicWebsite> {
+    return this.websites.updateAiSettings(params.id, dto);
+  }
+
+  @Get(':id/ai')
+  getAi(@Param() params: WebsiteIdParamDto): Promise<AiAgentStatus> {
+    return this.websites.getAiAgentStatus(params.id);
   }
 }

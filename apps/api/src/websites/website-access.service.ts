@@ -42,4 +42,23 @@ export class WebsiteAccessService {
 
     return website;
   }
+
+  /**
+   * Every website id this user may act on: implicitly all of them for ADMIN,
+   * the active memberships for AGENT. Drives the staff inbox room joins in the
+   * realtime gateway — a socket may only ever subscribe to inbox fan-out for
+   * websites it could also read over REST.
+   */
+  async listAccessibleWebsiteIds(user: AuthUser): Promise<string[]> {
+    if (user.role === Role.ADMIN) {
+      const rows = await this.prisma.website.findMany({ select: { id: true } });
+      return rows.map((w) => w.id);
+    }
+
+    const rows = await this.prisma.websiteMembership.findMany({
+      where: { userId: user.id, isActive: true },
+      select: { websiteId: true },
+    });
+    return rows.map((m) => m.websiteId);
+  }
 }

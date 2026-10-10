@@ -9,6 +9,8 @@ import { RealtimeSync } from './RealtimeSync';
 import { WebsiteList } from './WebsiteList';
 import { Inbox } from './Inbox';
 import { ConversationPane } from './ConversationPane';
+import { AgentPanel } from './AgentPanel';
+import { ReportsPanel } from './ReportsPanel';
 
 interface DashboardShellProps {
   onLogout: () => void;
@@ -50,6 +52,8 @@ export function DashboardShell({ onLogout }: DashboardShellProps) {
   const [conversationId, setConversationId] = useState<string | null>(() =>
     preferences.getConversationId(),
   );
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [view, setView] = useState<'inbox' | 'reports'>('inbox');
 
   const [online, setOnline] = useState(() => navigator.onLine);
   useEffect(() => {
@@ -88,6 +92,49 @@ export function DashboardShell({ onLogout }: DashboardShellProps) {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {website && (
+            <div role="group" aria-label="View" className="flex rounded-md border border-slate-300">
+              <button
+                type="button"
+                aria-pressed={view === 'inbox'}
+                onClick={() => setView('inbox')}
+                className={`rounded-l-md px-2.5 py-1 text-xs font-medium ${
+                  view === 'inbox' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Inbox
+              </button>
+              <button
+                type="button"
+                aria-pressed={view === 'reports'}
+                onClick={() => setView('reports')}
+                className={`rounded-r-md px-2.5 py-1 text-xs font-medium ${
+                  view === 'reports'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Reports
+              </button>
+            </div>
+          )}
+          {website && meQuery.data?.role === 'ADMIN' && (
+            <button
+              type="button"
+              onClick={() => setAgentOpen(true)}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                website.aiEnabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`size-2 rounded-full ${website.aiEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+              />
+              AI Agent
+            </button>
+          )}
           <ConnectionBadge status={status} />
           <span className="hidden text-sm text-slate-600 sm:inline">
             {meQuery.data ? displayName(meQuery.data) : '…'}
@@ -133,18 +180,24 @@ export function DashboardShell({ onLogout }: DashboardShellProps) {
                 onSelect={selectConversation}
               />
             </section>
-            <section className="min-h-0 overflow-hidden bg-white" aria-label="Conversation">
-              <ConversationPane
-                website={website}
-                conversationId={conversationId}
-                onSelectConversation={selectConversation}
-              />
-            </section>
+            {view === 'reports' && website ? (
+              <ReportsPanel website={website} />
+            ) : (
+              <section className="min-h-0 overflow-hidden bg-white" aria-label="Conversation">
+                <ConversationPane
+                  website={website}
+                  conversationId={conversationId}
+                  onSelectConversation={selectConversation}
+                />
+              </section>
+            )}
           </div>
         )}
       </div>
 
       <RealtimeSync websiteId={website?.id ?? null} />
+
+      {agentOpen && website && <AgentPanel website={website} onClose={() => setAgentOpen(false)} />}
     </div>
   );
 }

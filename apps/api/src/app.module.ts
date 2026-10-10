@@ -11,6 +11,8 @@ import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { WebSocketModule } from './realtime/websocket.module';
+import { AiModule } from './ai/ai.module';
+import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
 import { VisitorsModule } from './visitors/visitors.module';
 import { WebsitesModule } from './websites/websites.module';
@@ -32,6 +34,8 @@ import { WebsitesModule } from './websites/websites.module';
     ConversationsModule,
     RealtimeModule,
     WebSocketModule,
+    AiModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -600,24 +600,22 @@ describe('Phase 5b: messaging realtime over Socket.IO (e2e)', () => {
       expect(page.data.some((m) => m.id === message.id)).toBe(true);
     });
 
-    it('stops realtime delivery after conversation:leave (history still on REST)', async () => {
-      const staffSocket = await openSocket(staffAuth(agentAToken));
+    it('stops live delivery to a leaving visitor while REST remains the source of truth', async () => {
       const visitorSocket = await openSocket(visitorAuth(siteA, visitorA));
-      await join(staffSocket, convA.id);
+      const staffSocket = await openSocket(staffAuth(agentAToken));
       await join(visitorSocket, convA.id);
 
-      expect(expectFailed(await emitAck(staffSocket, 'conversation:leave', {}))).toBe('VALIDATION');
-      const leaveAck = await emitAck(staffSocket, 'conversation:leave', {
+      const leaveAck = await emitAck(visitorSocket, 'conversation:leave', {
         conversationId: convA.id,
       });
       expect(leaveAck.ok).toBe(true);
 
-      const noDelivery = waitForEvent(staffSocket, 'message:new', undefined, 250).then(
+      const noDelivery = waitForEvent(visitorSocket, 'message:new', undefined, 250).then(
         () => false,
         () => true,
       );
 
-      const ack = await send(visitorSocket, {
+      const ack = await send(staffSocket, {
         conversationId: convA.id,
         content: 'Nobody should see this live',
       });

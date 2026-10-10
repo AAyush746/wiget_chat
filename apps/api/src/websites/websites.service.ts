@@ -5,17 +5,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
-import type { AuthUser, Paginated, PublicWebsite } from '@chatflow/types';
+import { ConfigService } from '@nestjs/config';
+import type { AiAgentStatus, AuthUser, Paginated, PublicWebsite } from '@chatflow/types';
+import { AI_DEFAULT_FALLBACK_MESSAGE } from '../ai/ai.constants';
+import { describeProvider } from '../ai/ai.provider';
 import { generatePublicKey } from '../common/opaque-keys';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateWebsiteDto } from './dto/create-website.dto';
 import type { ListWebsitesQueryDto } from './dto/list-websites-query.dto';
 import type { UpdateWebsiteDto } from './dto/update-website.dto';
+import type { UpdateWebsiteAiDto } from './dto/update-website-ai.dto';
 import { toPublicWebsite } from './website.mapper';
 
 @Injectable()
 export class WebsitesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async create(dto: CreateWebsiteDto): Promise<PublicWebsite> {
     try {
@@ -133,6 +140,54 @@ export class WebsitesService {
    * unknown key *and* for a deactivated website with an identical message, so
    * a prober cannot tell the two apart.
    */
+
+  async updateAiSettings(id: string, dto: UpdateWebsiteAiDto): Promise<PublicWebsite> {
+    if (dto.aiEnabled === undefined && dto.aiFallbackMessage === undefined) {
+      throw new BadRequestException('Provide at least one field to update');
+    }
+
+    const website = await this.prisma.website.findUnique({ where: { id } });
+    if (!website) {
+      throw new NotFoundException('Website not found');
+    }
+
+    // Connecting the agent without an explicit escalation reply adopts a
+    // sensible default so a visitor is never left without an answer on handoff.
+    const enabling = dto.aiEnabled === true;
+    let nextFallback = website.aiFallbackMessage;
+    if (dto.aiFallbackMessage !== undefined) {
+      nextFallback = dto.aiFallbackMessage?.trim() || null;
+    } else if (enabling && !nextFallback) {
+      nextFallback = AI_DEFAULT_FALLBACK_MESSAGE;
+    }
+
+    const updated = await this.prisma.website.update({
+      where: { id },
+      data: {
+        ...(dto.aiEnabled !== undefined ? { aiEnabled: dto.aiEnabled } : {}),
+        ...(nextFallback !== website.aiFallbackMessage ? { aiFallbackMessage: nextFallback } : {}),
+      },
+    });
+    return toPublicWebsite(updated);
+  }
+
+  /**
+   * The "Connect Agent" panel's status: the website's connection flags plus
+   * which model backend the deployment is actually configured to use. The
+   * provider keys themselves are never exposed — only the safe summary.
+   */
+  async getAiAgentStatus(id: string): Promise<AiAgentStatus> {
+    const website = await this.prisma.website.findUnique({ where: { id } });
+    if (!website) {
+      throw new NotFoundException('Website not found');
+    }
+    return {
+      aiEnabled: website.aiEnabled,
+      aiFallbackMessage: website.aiFallbackMessage,
+      ...describeProvider(this.config),
+    };
+  }
+
   async resolveActiveByKey(publicKey: string) {
     const website = await this.prisma.website.findUnique({ where: { publicKey } });
     if (!website || !website.isActive) {

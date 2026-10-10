@@ -35,6 +35,9 @@ const getConversationMock = vi.hoisted(() => vi.fn());
 const listMessagesMock = vi.hoisted(() => vi.fn());
 const sendMessageRestMock = vi.hoisted(() => vi.fn());
 const closeConversationMock = vi.hoisted(() => vi.fn());
+const claimConversationMock = vi.hoisted(() => vi.fn());
+const assignConversationMock = vi.hoisted(() => vi.fn());
+const listAssignableAgentsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('../lib/api')>();
@@ -44,6 +47,9 @@ vi.mock('../lib/api', async (importOriginal) => {
     listMessages: listMessagesMock,
     sendMessageRest: sendMessageRestMock,
     closeConversation: closeConversationMock,
+    claimConversation: claimConversationMock,
+    assignConversation: assignConversationMock,
+    listAssignableAgents: listAssignableAgentsMock,
   };
 });
 
@@ -53,6 +59,8 @@ const website: PublicWebsite = {
   domain: 'site-a.example',
   publicKey: 'pk_1',
   isActive: true,
+  aiEnabled: false,
+  aiFallbackMessage: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -60,6 +68,7 @@ const website: PublicWebsite = {
 const openConversation: StaffConversation = {
   id: 'c1',
   status: 'OPEN',
+  handling: 'HUMAN',
   subject: null,
   createdAt: '2026-10-09T09:00:00.000Z',
   updatedAt: '2026-10-09T09:00:00.000Z',
@@ -71,7 +80,15 @@ const openConversation: StaffConversation = {
     email: 'aria@example.com',
     lastSeenAt: '2026-10-09T10:00:00.000Z',
   },
+  assignedAgent: null,
+  handoffReason: null,
+  handoffRequestedAt: null,
   lastMessage: null,
+};
+
+const assignedConversation: StaffConversation = {
+  ...openConversation,
+  assignedAgent: { id: 'u9', name: 'Bryn' },
 };
 
 const visitorMessage = (id: string, content: string) => ({
@@ -109,6 +126,10 @@ beforeEach(() => {
   listMessagesMock.mockReset();
   sendMessageRestMock.mockReset();
   closeConversationMock.mockReset();
+  claimConversationMock.mockReset();
+  assignConversationMock.mockReset();
+  listAssignableAgentsMock.mockReset();
+  listAssignableAgentsMock.mockResolvedValue([]);
   socketFacade.chatSocket.send.mockReset();
   socketFacade.chatSocket.join.mockReset();
   socketFacade.chatSocket.join.mockResolvedValue({ ok: true });
@@ -246,5 +267,80 @@ describe('ConversationPane', () => {
       before: 'cursor-1',
       limit: 50,
     });
+  });
+
+  it('shows an unassigned conversation and claims it for the current agent', async () => {
+    getConversationMock.mockResolvedValue(openConversation);
+    listMessagesMock.mockResolvedValue({ data: [], nextCursor: null, limit: 50 });
+    claimConversationMock.mockResolvedValue(assignedConversation);
+
+    const user = userEvent.setup();
+    renderPane();
+
+    expect(await screen.findByText('Unassigned')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Claim' }));
+
+    await waitFor(() => expect(claimConversationMock).toHaveBeenCalledWith('w1', 'c1'));
+    expect(await screen.findByText('Assigned to Bryn')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Claim' })).not.toBeInTheDocument();
+  });
+
+  it('assigns a conversation via the agent picker', async () => {
+    getConversationMock.mockResolvedValue(openConversation);
+    listMessagesMock.mockResolvedValue({ data: [], nextCursor: null, limit: 50 });
+    listAssignableAgentsMock.mockResolvedValue([{ id: 'u9', name: 'Bryn' }]);
+    assignConversationMock.mockResolvedValue(assignedConversation);
+
+    const user = userEvent.setup();
+    renderPane();
+
+    await screen.findByText('Unassigned');
+    await screen.findByRole('option', { name: 'Bryn' });
+    await user.selectOptions(screen.getByLabelText('Assign to agent'), 'u9');
+
+    await waitFor(() => expect(assignConversationMock).toHaveBeenCalledWith('w1', 'c1', 'u9'));
+    expect(await screen.findByText('Assigned to Bryn')).toBeInTheDocument();
+  });
+
+  it('lets an assigned agent reassign the conversation', async () => {
+    getConversationMock.mockResolvedValue(assignedConversation);
+    listMessagesMock.mockResolvedValue({ data: [], nextCursor: null, limit: 50 });
+    listAssignableAgentsMock.mockResolvedValue([
+      { id: 'u9', name: 'Bryn' },
+      { id: 'u2', name: 'Cleo' },
+    ]);
+    const reassigned: StaffConversation = {
+      ...assignedConversation,
+      assignedAgent: { id: 'u2', name: 'Cleo' },
+    };
+    assignConversationMock.mockResolvedValue(reassigned);
+
+    const user = userEvent.setup();
+    renderPane();
+
+    expect(await screen.findByText('Assigned to Bryn')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Claim' })).not.toBeInTheDocument();
+
+    await screen.findByRole('option', { name: 'Cleo' });
+    await user.selectOptions(screen.getByLabelText('Assign to agent'), 'u2');
+
+    await waitFor(() => expect(assignConversationMock).toHaveBeenCalledWith('w1', 'c1', 'u2'));
+    expect(await screen.findByText('Assigned to Cleo')).toBeInTheDocument();
+  });
+
+  it('surfaces the server conflict message when a claim races', async () => {
+    getConversationMock.mockResolvedValue(openConversation);
+    listMessagesMock.mockResolvedValue({ data: [], nextCursor: null, limit: 50 });
+    claimConversationMock.mockRejectedValue(
+      new (await import('../lib/api')).ApiError(409, 'Conversation is already assigned'),
+    );
+
+    const user = userEvent.setup();
+    renderPane();
+
+    await screen.findByText('Unassigned');
+    await user.click(screen.getByRole('button', { name: 'Claim' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Conversation is already assigned');
   });
 });

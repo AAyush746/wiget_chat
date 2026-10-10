@@ -6,12 +6,34 @@
     <title>ChatFlow Widget — dev host page</title>
   </head>
   <body>
-    <main style="font-family: system-ui, sans-serif; padding: 2rem">
+    <main style="font-family: system-ui, sans-serif; padding: 2rem; max-width: 36rem">
       <h1>Example host website</h1>
-      <p>This page simulates a customer site embedding the ChatFlow widget.</p>
+      <p style="color: #475569; line-height: 1.6">
+        This page simulates a customer website embedding the ChatFlow widget in development. Pass a
+        real website public key to enable it:
+      </p>
+      <pre style="background: #f1f5f9; border-radius: 0.5rem; padding: 1rem; overflow-x: auto">
+http://localhost:5174/?publicKey=YOUR_PUBLIC_WEBSITE_KEY
+      </pre>
+      <p style="color: #64748b; font-size: 0.9rem">
+        Get a key from a demo website with
+        <code style="background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 0.25rem"
+          >npm run demo</code
+        >
+        or
+        <code style="background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 0.25rem"
+          >npm run demo:storefront</code
+        >.
+      </p>
     </main>
     <script>
-      window.ChatFlowConfig = { websiteId: 'dev-website-id' };
+      (function setupWidget() {
+        const url = new URL(window.location.href);
+        window.ChatFlowConfig = {
+          publicKey: url.searchParams.get('publicKey') || '',
+          apiUrl: url.searchParams.get('apiUrl') || 'http://localhost:4000',
+        };
+      })();
     </script>
     <script type="module" src="/src/index.tsx"></script>
   </body>

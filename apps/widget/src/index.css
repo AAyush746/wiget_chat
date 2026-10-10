@@ -1,1 +1,19 @@
 @import 'tailwindcss';
+
+.chatflow-root {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+}
+
+.chatflow-root *,
+.chatflow-root *::before,
+.chatflow-root *::after {
+  box-sizing: border-box;
+}

@@ -1,5 +1,5 @@
 import type { Conversation, Prisma, Visitor } from '@prisma/client';
-import type { PublicConversation, StaffConversation } from '@chatflow/types';
+import type { HandoffReason, PublicConversation, StaffConversation } from '@chatflow/types';
 import { messageInclude, toChatMessage, type MessageWithSenders } from './message.mapper';
 
 /** Conversation fields visible to the visitor who owns the thread. */
@@ -7,6 +7,7 @@ export function toPublicConversation(conversation: Conversation): PublicConversa
   return {
     id: conversation.id,
     status: conversation.status,
+    handling: conversation.handling,
     subject: conversation.subject,
     createdAt: conversation.createdAt.toISOString(),
     updatedAt: conversation.updatedAt.toISOString(),
@@ -15,15 +16,17 @@ export function toPublicConversation(conversation: Conversation): PublicConversa
   };
 }
 
-/** A staff conversation row with the owner and its newest message preloaded. */
+/** A staff conversation row with the owner, current assignee and newest message preloaded. */
 export type StaffConversationRow = Conversation & {
   visitor: Visitor;
+  assignedAgent: { id: string; name: string | null } | null;
   messages: MessageWithSenders[];
 };
 
 /** Include clause that fetches exactly the newest message per conversation. */
 export const staffConversationInclude = {
   visitor: true,
+  assignedAgent: { select: { id: true, name: true } },
   messages: {
     take: 1,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -41,6 +44,9 @@ export function toStaffConversation(conversation: StaffConversationRow): StaffCo
       email: conversation.visitor.email,
       lastSeenAt: conversation.visitor.lastSeenAt.toISOString(),
     },
+    assignedAgent: conversation.assignedAgent,
+    handoffReason: conversation.handoffReason as HandoffReason | null,
+    handoffRequestedAt: conversation.handoffRequestedAt?.toISOString() ?? null,
     lastMessage: conversation.messages[0] ? toChatMessage(conversation.messages[0]) : null,
   };
 }

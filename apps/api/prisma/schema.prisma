@@ -47,11 +47,16 @@ model Website {
   domain    String   @unique
   publicKey String   @unique @default(uuid()) @map("public_key")
   isActive  Boolean  @default(true) @map("is_active")
+  /// Whether the automatic AI assistant may reply to visitors on this site.
+  aiEnabled       Boolean @default(false) @map("ai_enabled")
+  /// Optional pre-written reply used when the AI escalates without an answer.
+  aiFallbackMessage String? @map("ai_fallback_message")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   visitors     Visitor[]
   memberships  WebsiteMembership[]
+  faqs         FaqEntry[]
 
   @@map("websites")
 }
@@ -75,6 +80,23 @@ model WebsiteMembership {
   @@unique([userId, websiteId])
   @@index([websiteId])
   @@map("website_memberships")
+}
+
+/// One Q&A entry in a website's AI knowledge base (tenant-scoped). The AI
+/// assistant answers routine questions only from these entries; anything the
+/// provider cannot ground in this content is escalated to a human.
+model FaqEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  websiteId String   @map("website_id") @db.Uuid
+  question  String
+  answer    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, createdAt])
+  @@map("faq_entries")
 }
 
 /// An anonymous or identified end user of a website. `visitorKey` is a stable
@@ -110,22 +132,31 @@ model Visitor {
 /// the database rejects any conversation whose website does not match its
 /// visitor's website.
 model Conversation {
-  id              String             @id @default(uuid()) @db.Uuid
-  websiteId       String             @map("website_id") @db.Uuid
-  visitorId       String             @map("visitor_id") @db.Uuid
-  assignedAgentId String?            @map("assigned_agent_id") @db.Uuid
-  status          ConversationStatus @default(OPEN)
-  subject         String?
-  lastMessageAt   DateTime?          @map("last_message_at") @db.Timestamptz(3)
-  closedAt        DateTime?          @map("closed_at") @db.Timestamptz(3)
-  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String             @id @default(uuid()) @db.Uuid
+  websiteId        String             @map("website_id") @db.Uuid
+  visitorId        String             @map("visitor_id") @db.Uuid
+  assignedAgentId  String?            @map("assigned_agent_id") @db.Uuid
+  status           ConversationStatus @default(OPEN)
+  /// Who is responsible for replying: the AI assistant, a human agent, or the
+  /// AI after it (or the visitor) requested a handoff that is still pending.
+  handling            HandlingMode @default(AI)
+  /// When a handoff to a human was last requested (null = never / released).
+  handoffRequestedAt DateTime?    @map("handoff_requested_at") @db.Timestamptz(3)
+  /// Recorded escalation code (VISITOR_REQUESTED, UNSUPPORTED,
+  /// LOW_CONFIDENCE, AI_FAILURE, LIMIT_REACHED) — staff-facing only.
+  handoffReason    String?  @map("handoff_reason")
+  subject          String?
+  lastMessageAt    DateTime?          @map("last_message_at") @db.Timestamptz(3)
+  closedAt         DateTime?          @map("closed_at") @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   visitor       Visitor                  @relation(fields: [visitorId, websiteId], references: [id, websiteId], onDelete: Restrict)
   assignedAgent User?                    @relation("CurrentAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   messages      Message[]
   assignments   ConversationAssignment[]
   events        ConversationEvent[]
+  aiJobs        AiJob[]
 
   @@unique([id, websiteId])
   @@index([websiteId, status, lastMessageAt])
@@ -185,6 +216,42 @@ model ConversationAssignment {
   @@map("conversation_assignments")
 }
 
+/// One durable, idempotent AI-processing work item. A job is created in the
+/// *same transaction* as the visitor message it answers, so a reply is never
+/// lost to a crash between insert and enqueue. `messageId` is unique — every
+/// visitor message produces at most one job, and a retry resolves to it.
+///
+/// The worker claims a job atomically (status + lease token) and completes it
+/// with the same compare-and-swap style update it used to take the lease, so
+/// two processes can never both answer one question. Stale `RUNNING` leases
+/// are reclaimed after a timeout, making the pipeline durable across restarts.
+model AiJob {
+  id             String      @id @default(uuid()) @db.Uuid
+  websiteId      String      @map("website_id") @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  /// The source visitor message this job answers (unique → idempotency).
+  messageId      String      @map("message_id") @db.Uuid
+  status         AiJobStatus @default(PENDING)
+  attempts       Int         @default(0)
+  /// Earliest time the job may be (re)tried; backoff pushes this forward.
+  availableAt    DateTime    @default(now()) @map("available_at") @db.Timestamptz(3)
+  leaseToken     String?     @map("lease_token") @db.Uuid
+  leasedAt       DateTime?   @map("leased_at") @db.Timestamptz(3)
+  lastError      String?     @map("last_error")
+  replyMessageId String?     @map("reply_message_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// Composite FK keeps `websiteId` equal to the conversation's website at the
+  /// database level (the same tenant guarantee the other scoped tables use).
+  conversation Conversation @relation(fields: [conversationId, websiteId], references: [id, websiteId], onDelete: Cascade)
+
+  @@unique([messageId])
+  @@index([websiteId, createdAt])
+  @@index([status, availableAt])
+  @@map("ai_jobs")
+}
+
 /// Lifecycle/audit events with enough context for future analytics. This is a
 /// deliberately small append-only table, not an event-sourcing system: the
 /// current state still lives on Conversation and the history on the other
@@ -221,10 +288,33 @@ enum ConversationStatus {
   CLOSED
 }
 
+/// Who is on the hook to reply to a conversation. AI messages are only ever
+/// generated while handling is `AI`; any human takeover or escalation moves it
+/// to `HANDOFF_PENDING`/`HUMAN`, after which the AI never replies again until
+/// an authorized staff member explicitly releases the thread back to it.
+enum HandlingMode {
+  AI
+  HANDOFF_PENDING
+  HUMAN
+}
+
 enum MessageSender {
   VISITOR
   AGENT
   SYSTEM
+  /// An automatic AI reply. Like `SYSTEM`, both actor references are null —
+  /// it is attributed to "ChatFlow AI", never to a human agent.
+  AI
+}
+
+/// Lifecycle of one AI-processing work item.
+enum AiJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  /// Processing superseded (human took over, conversation closed, …).
+  CANCELLED
 }
 
 enum ConversationEventType {

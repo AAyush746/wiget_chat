@@ -34,11 +34,18 @@ export function WebsiteList({ websites, selectedId, onSelect }: WebsiteListProps
                     </span>
                     <span className="block truncate text-xs text-slate-400">{website.domain}</span>
                   </span>
-                  {!website.isActive && (
-                    <span className="ml-2 shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                      Deactivated
-                    </span>
-                  )}
+                  <span className="ml-2 flex shrink-0 flex-col items-end gap-1">
+                    {website.aiEnabled && (
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-600">
+                        AI
+                      </span>
+                    )}
+                    {!website.isActive && (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                        Deactivated
+                      </span>
+                    )}
+                  </span>
                 </button>
               </li>
             );
